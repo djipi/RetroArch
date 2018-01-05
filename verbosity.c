@@ -29,6 +29,10 @@
 #include <stdio.h>
 #include <stdarg.h>
 
+#ifdef _MSC_VER
+#include <compat/msvc.h>
+#endif
+
 #ifdef ANDROID
 #include <android/log.h>
 #endif
@@ -99,7 +103,7 @@ void retro_main_log_file_init(const char *path)
 
    log_file_fp          = fopen_utf8(path, "wb");
    log_file_initialized = true;
-   
+
    /* TODO: this is only useful for a few platforms, find which and add ifdef */
    log_file_buf = calloc(1, 0x4000);
    setvbuf(log_file_fp, (char*)log_file_buf, _IOFBF, 0x4000);
@@ -146,6 +150,7 @@ static aslclient asl_client;
    asl_free(msg);
 #endif
 #elif defined(_XBOX1)
+   {
    /* FIXME: Using arbitrary string as fmt argument is unsafe. */
    char msg_new[1024];
    char buffer[1024];
@@ -157,6 +162,7 @@ static aslclient asl_client;
          fmt);
    wvsprintf(buffer, msg_new, ap);
    OutputDebugStringA(buffer);
+   }
 #elif defined(ANDROID)
    int prio = ANDROID_LOG_INFO;
    if (tag)

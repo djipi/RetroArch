@@ -688,8 +688,6 @@ void gl_load_texture_data(
       glGenerateMipmap(GL_TEXTURE_2D);
 }
 
-
-#if defined(HAVE_MENU)
 static void gl_set_texture_frame(void *data,
       const void *frame, bool rgb32, unsigned width, unsigned height,
       float alpha)
@@ -740,19 +738,19 @@ static void gl_render_osd_background(
    video_coords_t coords;
    struct uniform_info uniform_param;
    float colors[4];
-   const unsigned 
+   const unsigned
       vertices_total       = 6;
    float *dummy            = (float*)calloc(4 * vertices_total, sizeof(float));
    float *verts            = (float*)malloc(2 * vertices_total * sizeof(float));
    settings_t *settings    = config_get_ptr();
-   int msg_width           = 
+   int msg_width           =
       font_driver_get_message_width(NULL, msg, strlen(msg), 1.0f);
 
    /* shader driver expects vertex coords as 0..1 */
    float x                 = video_info->font_msg_pos_x;
    float y                 = video_info->font_msg_pos_y;
    float width             = msg_width / (float)video_info->width;
-   float height            = 
+   float height            =
       settings->floats.video_font_size / (float)video_info->height;
 
    float x2                = 0.005f; /* extend background around text */
@@ -796,7 +794,7 @@ static void gl_render_osd_background(
 
    coords_data.handle_data = NULL;
    coords_data.data        = &coords;
- 
+
    video_driver_set_viewport(video_info->width,
          video_info->height, true, false);
 
@@ -855,6 +853,7 @@ static void gl_set_osd_msg(void *data,
    font_driver_render_msg(video_info, font, msg, params);
 }
 
+#if defined(HAVE_MENU)
 static void gl_show_mouse(void *data, bool state)
 {
    video_context_driver_show_mouse(&state);
@@ -867,32 +866,6 @@ static struct video_shader *gl_get_current_shader(void *data)
    video_shader_driver_direct_get_current_shader(&shader_info);
 
    return shader_info.data;
-}
-
-static void gl_pbo_async_readback(gl_t *gl)
-{
-#ifdef HAVE_OPENGLES
-   GLenum fmt  = GL_RGBA;
-   GLenum type = GL_UNSIGNED_BYTE;
-#else
-   GLenum fmt  = GL_BGRA;
-   GLenum type = GL_UNSIGNED_INT_8_8_8_8_REV;
-#endif
-
-   if (gl->renderchain_driver->bind_pbo)
-      gl->renderchain_driver->bind_pbo(
-         gl->pbo_readback[gl->pbo_readback_index++]);
-   gl->pbo_readback_index &= 3;
-
-   /* 4 frames back, we can readback. */
-   gl->pbo_readback_valid[gl->pbo_readback_index] = true;
-
-   if (gl->renderchain_driver->readback)
-      gl->renderchain_driver->readback(gl, gl->renderchain_data,
-            video_pixel_get_alignment(gl->vp.width * sizeof(uint32_t)),
-            fmt, type, NULL);
-   if (gl->renderchain_driver->unbind_pbo)
-      gl->renderchain_driver->unbind_pbo(gl, gl->renderchain_data);
 }
 
 static INLINE void gl_draw_texture(gl_t *gl, video_frame_info_t *video_info)
@@ -956,6 +929,32 @@ static INLINE void gl_draw_texture(gl_t *gl, video_frame_info_t *video_info)
    gl->coords.color       = gl->white_color_ptr;
 }
 #endif
+
+static void gl_pbo_async_readback(gl_t *gl)
+{
+#ifdef HAVE_OPENGLES
+   GLenum fmt  = GL_RGBA;
+   GLenum type = GL_UNSIGNED_BYTE;
+#else
+   GLenum fmt  = GL_BGRA;
+   GLenum type = GL_UNSIGNED_INT_8_8_8_8_REV;
+#endif
+
+   if (gl->renderchain_driver->bind_pbo)
+      gl->renderchain_driver->bind_pbo(
+         gl->pbo_readback[gl->pbo_readback_index++]);
+   gl->pbo_readback_index &= 3;
+
+   /* 4 frames back, we can readback. */
+   gl->pbo_readback_valid[gl->pbo_readback_index] = true;
+
+   if (gl->renderchain_driver->readback)
+      gl->renderchain_driver->readback(gl, gl->renderchain_data,
+            video_pixel_get_alignment(gl->vp.width * sizeof(uint32_t)),
+            fmt, type, NULL);
+   if (gl->renderchain_driver->unbind_pbo)
+      gl->renderchain_driver->unbind_pbo(gl, gl->renderchain_data);
+}
 
 
 static bool gl_frame(void *data, const void *frame,
@@ -1033,7 +1032,7 @@ static bool gl_frame(void *data, const void *frame,
    glBindTexture(GL_TEXTURE_2D, gl->texture[gl->tex_index]);
 
    /* Can be NULL for frame dupe / NULL render. */
-   if (frame) 
+   if (frame)
    {
       if (!gl->hw_render_fbo_init)
       {
@@ -1082,7 +1081,7 @@ static bool gl_frame(void *data, const void *frame,
 
    if (gl->fbo_feedback_enable)
    {
-      const struct video_fbo_rect 
+      const struct video_fbo_rect
          *rect                        = &gl->fbo_rect[gl->fbo_feedback_pass];
       GLfloat xamt                    = (GLfloat)rect->img_width / rect->width;
       GLfloat yamt                    = (GLfloat)rect->img_height / rect->height;
@@ -1946,7 +1945,7 @@ static void *gl_init(const video_info_t *video, const input_driver_t **input, vo
    video_context_driver_input_driver(&inp);
 
    if (video->font_enable)
-      font_driver_init_osd(gl, false, 
+      font_driver_init_osd(gl, false,
             video->is_threaded,
             FONT_DRIVER_RENDER_OPENGL_API);
 
@@ -2554,15 +2553,12 @@ static const video_poke_interface_t gl_poke_interface = {
    gl_get_proc_address,
    gl_set_aspect_ratio,
    gl_apply_state_changes,
-#if defined(HAVE_MENU)
    gl_set_texture_frame,
    gl_set_texture_enable,
    gl_set_osd_msg,
+#if defined(HAVE_MENU)
    gl_show_mouse,
 #else
-   NULL,
-   NULL,
-   NULL,
    NULL,
 #endif
 

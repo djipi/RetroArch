@@ -1,6 +1,6 @@
 /*  RetroArch - A frontend for libretro.
  *  Copyright (C) 2011-2017 - Daniel De Matteis
- * 
+ *
  *  RetroArch is free software: you can redistribute it and/or modify it under the terms
  *  of the GNU General Public License as published by the Free Software Found-
  *  ation, either version 3 of the License, or (at your option) any later version.
@@ -45,7 +45,7 @@ LPDIRECT3DTEXTURE d3d_texture_new(LPDIRECT3DDEVICE dev,
       const char *path, unsigned width, unsigned height,
       unsigned miplevels, unsigned usage, D3DFORMAT format,
       D3DPOOL pool, unsigned filter, unsigned mipfilter,
-      D3DCOLOR color_key, void *src_info, 
+      D3DCOLOR color_key, void *src_info,
       PALETTEENTRY *palette);
 
 void d3d_set_stream_source(LPDIRECT3DDEVICE dev, unsigned stream_no,
@@ -167,7 +167,20 @@ bool d3d_create_device(LPDIRECT3DDEVICE *dev,
 
 bool d3d_reset(LPDIRECT3DDEVICE dev, D3DPRESENT_PARAMETERS *d3dpp);
 
+bool d3d_device_get_backbuffer(LPDIRECT3DDEVICE dev, 
+      unsigned idx, unsigned swapchain_idx, 
+      unsigned backbuffer_type, void **data);
+
 void d3d_device_free(LPDIRECT3DDEVICE dev, LPDIRECT3D pd3d);
+
+void *d3d_create(void);
+
+bool d3d_initialize_symbols(void);
+
+void d3d_deinitialize_symbols(void);
+
+bool d3dx_create_font_indirect(LPDIRECT3DDEVICE dev,
+      void *desc, void **font_data);
 
 D3DTEXTUREFILTERTYPE d3d_translate_filter(unsigned type);
 

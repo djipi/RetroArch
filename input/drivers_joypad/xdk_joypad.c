@@ -19,7 +19,7 @@
 #include "../input_driver.h"
 #include "../../tasks/tasks_internal.h"
 
-static uint32_t pad_state[MAX_PADS];
+static uint64_t pad_state[MAX_PADS];
 static int16_t analog_state[MAX_PADS][2][2];
 #ifdef _XBOX1
 static HANDLE gamepads[MAX_PADS];
@@ -73,7 +73,7 @@ static bool xdk_joypad_button(unsigned port_num, uint16_t joykey)
    if (port_num >= MAX_PADS)
       return false;
 
-   return pad_state[port_num] & (1 << joykey);
+   return pad_state[port_num] & (UINT64_C(1) << joykey);
 }
 
 static void xdk_joypad_get_buttons(unsigned port_num, retro_bits_t *state)
@@ -140,9 +140,15 @@ static void xdk_joypad_poll(void)
 #endif
 
 #if defined(_XBOX1)
+#ifdef __cplusplus
    XGetDeviceChanges(XDEVICE_TYPE_GAMEPAD,
          reinterpret_cast<PDWORD>(&dwInsertions),
          reinterpret_cast<PDWORD>(&dwRemovals));
+#else
+   XGetDeviceChanges(XDEVICE_TYPE_GAMEPAD,
+         (PDWORD)&dwInsertions,
+         (PDWORD)&dwRemovals);
+#endif
 #endif
 
    for (port = 0; port < MAX_PADS; port++)
@@ -206,7 +212,7 @@ static void xdk_joypad_poll(void)
          continue;
 #endif
 
-      state_cur = &pad_state[port];
+      state_cur  = &pad_state[port];
 
       *state_cur = 0;
       *state_cur |= ((state_tmp.Gamepad.wButtons & XINPUT_GAMEPAD_DPAD_LEFT) ? (UINT64_C(1) << RETRO_DEVICE_ID_JOYPAD_LEFT) : 0);

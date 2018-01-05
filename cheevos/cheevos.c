@@ -19,6 +19,7 @@
 #include <file/file_path.h>
 #include <string/stdstring.h>
 #include <formats/jsonsax.h>
+#include <streams/interface_stream.h>
 #include <streams/file_stream.h>
 #include <features/features_cpu.h>
 #include <compat/strl.h>
@@ -220,45 +221,9 @@ typedef struct
    cheevos_expr_t      value;
 } cheevos_leaderboard_t;
 
-/*
 typedef struct
 {
-  bool is_lookup;
-  char* prestring;
-  cheevos_expr_t expression;
-} cheevos_rps_element_t;
-
-typedef struct
-{
-  char*    name;
-  unsigned type;
-} cheevos_rps_format_t;
-
-typedef struct
-{
-  unsigned compare;
-  char*    result;
-} cheevos_rps_lookup_value;
-
-typedef struct
-{
-  char*                     name;
-  cheevos_rps_lookup_value* values;
-} cheevos_rps_lookup_t;
-
-typedef struct
-{
-  cheevos_rps_element_t* elements;
-  cheevos_rps_format_t*  formats;
-  unsigned               format_count;
-  cheevos_rps_lookup_t*  lookups;
-  unsigned               lookup_count;
-} cheevos_rps_t;
-*/
-
-typedef struct
-{
-   int  console_id;
+   cheevos_console_t console_id;
    bool core_supports;
    bool addrs_patched;
    int  add_buffer;
@@ -276,7 +241,7 @@ typedef struct
 
 static cheevos_locals_t cheevos_locals =
 {
-   /* console_id          */ 0,
+   /* console_id          */ CHEEVOS_CONSOLE_NONE,
    /* core_supports       */ true,
    /* addrs_patched       */ false,
    /* add_buffer          */ 0,
@@ -838,6 +803,7 @@ static int cheevos_count_cheevos(const char *json,
    int res;
    cheevos_countud_t ud;
    ud.in_cheevos       = 0;
+   ud.in_lboards       = 0;
    ud.core_count       = 0;
    ud.unofficial_count = 0;
    ud.lboard_count     = 0;
@@ -1129,11 +1095,14 @@ static INLINE const char *cheevos_dupstr(const cheevos_field_t *field)
 static int cheevos_new_cheevo(cheevos_readud_t *ud)
 {
    cheevo_t *cheevo = NULL;
+   long flags = strtol(ud->flags.string, NULL, 10);
 
-   if (strtol(ud->flags.string, NULL, 10) == 3)
+   if (flags == 3)
       cheevo = cheevos_locals.core.cheevos + ud->core_count++;
-   else
+   else if (flags == 5)
       cheevo = cheevos_locals.unofficial.cheevos + ud->unofficial_count++;
+   else
+      return 0;
 
    cheevo->id          = (unsigned)strtol(ud->id.string, NULL, 10);
    cheevo->title       = cheevos_dupstr(&ud->title);
@@ -1385,7 +1354,7 @@ static int cheevos_read__json_number(void *userdata,
    }
    else if (ud->is_console_id)
    {
-      cheevos_locals.console_id = (int)strtol(number, NULL, 10);
+      cheevos_locals.console_id = (cheevos_console_t)strtol(number, NULL, 10);
       ud->is_console_id = 0;
    }
 
@@ -1858,14 +1827,26 @@ static int cheevos_expr_value(cheevos_expr_t* expr)
    unsigned i;
    /* Separate possible values with '$' operator, submit the largest */
    unsigned current_value = 0;
-   /* TODO/FIXME - variable length forbidden in C89 - rewrite this! */
-   int values[expr->compare_count];
+   int values[16];
+
+   if (expr->compare_count >= sizeof(values) / sizeof(values[0]))
+   {
+      RARCH_ERR("[CHEEVOS]: too many values in the leaderboard expression: %u\n", expr->compare_count);
+      return 0;
+   }
 
    memset(values, 0, sizeof values);
 
    for (i = expr->count; i != 0; i--, term++)
    {
+      if (current_value >= sizeof(values) / sizeof(values[0]))
+      {
+         RARCH_ERR("[CHEEVOS]: too many values in the leaderboard expression: %u\n", current_value);
+         return 0;
+      }
+
       values[current_value] += cheevos_var_get_value(&term->var) * term->multiplier;
+
       if (term->compare_next)
          current_value++;
    }
@@ -1880,7 +1861,8 @@ static int cheevos_expr_value(cheevos_expr_t* expr)
 
       return maximum;
    }
-   else return values[0];
+   else
+      return values[0];
 }
 
 static void cheevos_make_lboard_url(const cheevos_leaderboard_t *lboard,
@@ -2510,7 +2492,7 @@ typedef struct
    size_t romsize, bytes; \
    int mapper; \
    bool round; \
-   RFILE* stream; \
+   intfstream_t *stream; \
    size_t size; \
    char url[256]; \
    struct http_connection_t *conn; \
@@ -2662,14 +2644,17 @@ static int cheevos_iterate(coro_t* coro)
       /* Load the content into memory, or copy it over to our own buffer */
       if (!CHEEVOS_VAR_DATA)
       {
-         CHEEVOS_VAR_STREAM = filestream_open(CHEEVOS_VAR_PATH, RFILE_MODE_READ, -1);
+         CHEEVOS_VAR_STREAM = intfstream_open_file(
+               CHEEVOS_VAR_PATH,
+               RETRO_VFS_FILE_ACCESS_READ,
+               RETRO_VFS_FILE_ACCESS_HINT_NONE);
 
          if (!CHEEVOS_VAR_STREAM)
             CORO_STOP();
 
          CORO_YIELD();
          CHEEVOS_VAR_LEN = 0;
-         CHEEVOS_VAR_COUNT = filestream_get_size(CHEEVOS_VAR_STREAM);
+         CHEEVOS_VAR_COUNT = intfstream_get_size(CHEEVOS_VAR_STREAM);
 
          if (CHEEVOS_VAR_COUNT > CHEEVOS_SIZE_LIMIT)
             CHEEVOS_VAR_COUNT = CHEEVOS_SIZE_LIMIT;
@@ -2678,7 +2663,8 @@ static int cheevos_iterate(coro_t* coro)
 
          if (!CHEEVOS_VAR_DATA)
          {
-            filestream_close(CHEEVOS_VAR_STREAM);
+            intfstream_close(CHEEVOS_VAR_STREAM);
+            free(CHEEVOS_VAR_STREAM);
             CORO_STOP();
          }
 
@@ -2690,7 +2676,7 @@ static int cheevos_iterate(coro_t* coro)
             if (to_read > CHEEVOS_VAR_COUNT)
                to_read = CHEEVOS_VAR_COUNT;
 
-            num_read = filestream_read(CHEEVOS_VAR_STREAM, (void*)buffer, to_read);
+            num_read = intfstream_read(CHEEVOS_VAR_STREAM, (void*)buffer, to_read);
 
             if (num_read <= 0)
                break;
@@ -2704,7 +2690,8 @@ static int cheevos_iterate(coro_t* coro)
             CORO_YIELD();
          }
 
-         filestream_close(CHEEVOS_VAR_STREAM);
+         intfstream_close(CHEEVOS_VAR_STREAM);
+         free(CHEEVOS_VAR_STREAM);
       }
 
       /* Use the supported extensions as a hint
@@ -2788,7 +2775,7 @@ static int cheevos_iterate(coro_t* coro)
          size = ftell(file);
          fseek(file, 0, SEEK_SET);
 
-         CHEEVOS_VAR_JSON = (const char*)malloc(size + 1);
+         CHEEVOS_VAR_JSON = (char*)malloc(size + 1);
          fread((void*)CHEEVOS_VAR_JSON, 1, size, file);
 
          fclose(file);
@@ -2865,8 +2852,12 @@ static int cheevos_iterate(coro_t* coro)
 
       }
 
-      CORO_GOSUB(GET_BADGES);
+      if (   cheevos_locals.core.count == 0
+          && cheevos_locals.unofficial.count == 0
+          && cheevos_locals.lboard_count == 0)
+         cheevos_unload();
 
+      CORO_GOSUB(GET_BADGES);
       CORO_STOP();
 
    /**************************************************************************
@@ -3143,9 +3134,10 @@ static int cheevos_iterate(coro_t* coro)
    CORO_GOSUB(LOGIN);
 
    snprintf(CHEEVOS_VAR_URL, sizeof(CHEEVOS_VAR_URL),
-      "http://retroachievements.org/dorequest.php?r=patch&u=%s&g=%u&f=3&l=1&t=%s",
+      "http://retroachievements.org/dorequest.php?r=patch&g=%u&u=%s&t=%s",
+      CHEEVOS_VAR_GAMEID,
       CHEEVOS_VAR_SETTINGS->arrays.cheevos_username,
-      CHEEVOS_VAR_GAMEID, cheevos_locals.token);
+      cheevos_locals.token);
 
       CHEEVOS_VAR_URL[sizeof(CHEEVOS_VAR_URL) - 1] = 0;
 
@@ -3175,7 +3167,7 @@ static int cheevos_iterate(coro_t* coro)
 
    {
       settings_t *settings = config_get_ptr();
-      if (!string_is_equal(settings->arrays.menu_driver, "xmb") || 
+      if (!string_is_equal(settings->arrays.menu_driver, "xmb") ||
             !settings->bools.cheevos_badges_enable)
          CORO_RET();
    }
@@ -3194,7 +3186,7 @@ static int cheevos_iterate(coro_t* coro)
          if (!path_is_directory(CHEEVOS_VAR_BADGE_BASE_PATH))
             path_mkdir(CHEEVOS_VAR_BADGE_BASE_PATH);
          CORO_YIELD();
-         if (CHEEVOS_VAR_J == 0) 
+         if (CHEEVOS_VAR_J == 0)
             snprintf(CHEEVOS_VAR_BADGE_NAME, sizeof(CHEEVOS_VAR_BADGE_NAME), "%s.png", CHEEVOS_VAR_CHEEVO_CURR->badge);
          else
             snprintf(CHEEVOS_VAR_BADGE_NAME, sizeof(CHEEVOS_VAR_BADGE_NAME), "%s_lock.png", CHEEVOS_VAR_CHEEVO_CURR->badge);

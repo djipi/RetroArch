@@ -322,7 +322,7 @@ static bool d3d_process_shader(d3d_video_t *d3d)
 {
 #ifdef HAVE_FBO
    if (d3d && !string_is_empty(d3d->shader_path) &&
-         string_is_equal_fast(path_get_extension(d3d->shader_path), "cgp", 3))
+         string_is_equal(path_get_extension(d3d->shader_path), "cgp"))
       return d3d_init_multipass(d3d);
 #endif
 
@@ -333,15 +333,16 @@ static void d3d_viewport_info(void *data, struct video_viewport *vp)
 {
    d3d_video_t *d3d   = (d3d_video_t*)data;
 
-   if (  !d3d || 
-         !d3d->renderchain_driver || 
+   if (  !d3d ||
+         !d3d->renderchain_driver ||
          !d3d->renderchain_driver->viewport_info)
       return;
 
    d3d->renderchain_driver->viewport_info(d3d, vp);
 }
 
-static void d3d_overlay_render(d3d_video_t *d3d, video_frame_info_t *video_info,
+static void d3d_overlay_render(d3d_video_t *d3d,
+      video_frame_info_t *video_info,
       overlay_t *overlay)
 {
    struct video_viewport vp;
@@ -372,7 +373,7 @@ static void d3d_overlay_render(d3d_video_t *d3d, video_frame_info_t *video_info,
       vert[i][7]   = 1.0f;
       vert[i][8]   = overlay->alpha_mod;
    }
-   
+
    d3d_viewport_info(d3d, &vp);
 
    overlay_width   = vp.width;
@@ -493,7 +494,7 @@ static void d3d_deinitialize(d3d_video_t *d3d)
    d3d_deinit_chain(d3d);
 }
 
-#if defined(HAVE_D3D8) && !defined(_XBOX)
+#if defined(HAVE_D3D8)
 #define FS_PRESENTINTERVAL(pp) ((pp)->FullScreen_PresentationInterval)
 #else
 #define FS_PRESENTINTERVAL(pp) ((pp)->PresentationInterval)
@@ -514,7 +515,7 @@ void d3d_make_d3dpp(void *data,
 #ifdef _XBOX
    d3dpp->Windowed             = false;
 #else
-   d3dpp->Windowed             = settings->bools.video_windowed_fullscreen 
+   d3dpp->Windowed             = settings->bools.video_windowed_fullscreen
       || !info->fullscreen;
 #endif
    FS_PRESENTINTERVAL(d3dpp)   = D3DPRESENT_INTERVAL_IMMEDIATE;
@@ -545,13 +546,13 @@ void d3d_make_d3dpp(void *data,
    d3dpp->BackBufferFormat =
 #ifdef _XBOX360
       global->console.screen.gamma_correction ?
-      (D3DFORMAT)MAKESRGBFMT(info->rgb32 ? 
+      (D3DFORMAT)MAKESRGBFMT(info->rgb32 ?
             D3DFMT_X8R8G8B8 : D3DFMT_LIN_R5G6B5) :
 #endif
       info->rgb32 ? D3DFMT_X8R8G8B8 : D3DFMT_LIN_R5G6B5;
 #else
    d3dpp->hDeviceWindow    = win32_get_window();
-   d3dpp->BackBufferFormat = !d3dpp->Windowed ? 
+   d3dpp->BackBufferFormat = !d3dpp->Windowed ?
       D3DFMT_X8R8G8B8 : D3DFMT_UNKNOWN;
 #endif
 
@@ -578,36 +579,40 @@ void d3d_make_d3dpp(void *data,
    d3dpp->MultiSampleType         = D3DMULTISAMPLE_NONE;
    d3dpp->EnableAutoDepthStencil  = FALSE;
 #if defined(_XBOX1)
-   /* Get the "video mode" */
-   DWORD video_mode               = XGetVideoFlags();
-
-   /* Check if we are able to use progressive mode. */
-   if (video_mode & XC_VIDEO_FLAGS_HDTV_480p)
-      d3dpp->Flags = D3DPRESENTFLAG_PROGRESSIVE;
-   else
-      d3dpp->Flags = D3DPRESENTFLAG_INTERLACED;
-
-   /* Only valid in PAL mode, not valid for HDTV modes. */
-   if (XGetVideoStandard() == XC_VIDEO_STANDARD_PAL_I)
    {
-      if (video_mode & XC_VIDEO_FLAGS_PAL_60Hz)
-         d3dpp->FullScreen_RefreshRateInHz = 60;
-      else
-         d3dpp->FullScreen_RefreshRateInHz = 50;
-   }
+      /* Get the "video mode" */
+      DWORD video_mode               = XGetVideoFlags();
 
-   if (XGetAVPack() == XC_AV_PACK_HDTV)
-   {
+      /* Check if we are able to use progressive mode. */
       if (video_mode & XC_VIDEO_FLAGS_HDTV_480p)
          d3dpp->Flags = D3DPRESENTFLAG_PROGRESSIVE;
-      else if (video_mode & XC_VIDEO_FLAGS_HDTV_720p)
-         d3dpp->Flags = D3DPRESENTFLAG_PROGRESSIVE;
-      else if (video_mode & XC_VIDEO_FLAGS_HDTV_1080i)
+      else
          d3dpp->Flags = D3DPRESENTFLAG_INTERLACED;
-   }
 
-   if (widescreen_mode)
-      d3dpp->Flags |= D3DPRESENTFLAG_WIDESCREEN;
+      /* Only valid in PAL mode, not valid for HDTV modes. */
+      if (XGetVideoStandard() == XC_VIDEO_STANDARD_PAL_I)
+      {
+         if (video_mode & XC_VIDEO_FLAGS_PAL_60Hz)
+            d3dpp->FullScreen_RefreshRateInHz = 60;
+         else
+            d3dpp->FullScreen_RefreshRateInHz = 50;
+      }
+
+      if (XGetAVPack() == XC_AV_PACK_HDTV)
+      {
+         if (video_mode & XC_VIDEO_FLAGS_HDTV_480p)
+            d3dpp->Flags = D3DPRESENTFLAG_PROGRESSIVE;
+         else if (video_mode & XC_VIDEO_FLAGS_HDTV_720p)
+            d3dpp->Flags = D3DPRESENTFLAG_PROGRESSIVE;
+         else if (video_mode & XC_VIDEO_FLAGS_HDTV_1080i)
+            d3dpp->Flags = D3DPRESENTFLAG_INTERLACED;
+      }
+
+#if 0
+      if (widescreen_mode)
+         d3dpp->Flags |= D3DPRESENTFLAG_WIDESCREEN;
+#endif
+   }
 #elif defined(_XBOX360)
 #if 0
    if (!widescreen_mode)
@@ -632,7 +637,8 @@ static bool d3d_init_base(void *data, const video_info_t *info)
 
    d3d_make_d3dpp(d3d, info, &d3dpp);
 
-   g_pD3D = D3DCREATE_CTX(D3D_SDK_VERSION);
+   g_pD3D            = (LPDIRECT3D)d3d_create();
+
    if (!g_pD3D)
    {
       RARCH_ERR("[D3D]: Failed to create D3D interface.\n");
@@ -647,7 +653,7 @@ static bool d3d_init_base(void *data, const video_info_t *info)
 #endif
 
    if (!d3d_create_device(&d3d->dev, &d3dpp,
-            g_pD3D, 
+            g_pD3D,
             focus_window,
             d3d->cur_mon_id)
       )
@@ -724,8 +730,8 @@ static void d3d_calculate_rect(void *data,
 
          if (fabsf(device_aspect - desired_aspect) < 0.0001f)
          {
-            /* If the aspect ratios of screen and desired aspect 
-             * ratio are sufficiently equal (floating point stuff), 
+            /* If the aspect ratios of screen and desired aspect
+             * ratio are sufficiently equal (floating point stuff),
              * assume they are actually equal.
              */
          }
@@ -823,7 +829,7 @@ static bool d3d_initialize(d3d_video_t *d3d, const video_info_t *info)
    strlcpy(settings->paths.path_font, "game:\\media\\Arial_12.xpr",
          sizeof(settings->paths.path_font));
 #endif
-   font_driver_init_osd(d3d, false, 
+   font_driver_init_osd(d3d, false,
          info->is_threaded,
          FONT_DRIVER_RENDER_DIRECT3D_API);
 
@@ -976,9 +982,6 @@ static bool d3d_init_internal(d3d_video_t *d3d,
    MONITORINFOEX current_mon;
    HMONITOR hm_to_use;
 #endif
-#ifdef HAVE_SHADERS
-   enum rarch_shader_type type;
-#endif
 #ifdef HAVE_WINDOW
    DWORD style;
    unsigned win_width        = 0;
@@ -991,7 +994,6 @@ static bool d3d_init_internal(d3d_video_t *d3d,
 
    d3d->should_resize        = false;
 
-#if defined(HAVE_MENU)
    d3d->menu                 = (overlay_t*)calloc(1, sizeof(*d3d->menu));
 
    if (!d3d->menu)
@@ -1005,7 +1007,6 @@ static bool d3d_init_internal(d3d_video_t *d3d,
    d3d->menu->vert_coords[1] = 1;
    d3d->menu->vert_coords[2] = 1;
    d3d->menu->vert_coords[3] = -1;
-#endif
 
    memset(&d3d->windowClass, 0, sizeof(d3d->windowClass));
 
@@ -1062,11 +1063,11 @@ static bool d3d_init_internal(d3d_video_t *d3d,
    /* This should only be done once here
     * to avoid set_shader() to be overridden
     * later. */
-   type =
-      video_shader_parse_type(settings->paths.path_shader, RARCH_SHADER_NONE);
-
    if (settings->bools.video_shader_enable)
    {
+      enum rarch_shader_type type =
+         video_shader_parse_type(settings->paths.path_shader, RARCH_SHADER_NONE);
+
       switch (type)
       {
          case RARCH_SHADER_CG:
@@ -1137,6 +1138,9 @@ static void *d3d_init(const video_info_t *info,
    d3d_video_t            *d3d        = NULL;
    const gfx_ctx_driver_t *ctx_driver = NULL;
 
+   if (!d3d_initialize_symbols())
+      return NULL;
+
 #ifdef _XBOX
    if (video_driver_get_ptr(false))
    {
@@ -1174,11 +1178,8 @@ static void *d3d_init(const video_info_t *info,
 #endif
 #ifdef _XBOX
    d3d->should_resize        = false;
-#else
-#ifdef HAVE_MENU
+#endif
    d3d->menu                 = NULL;
-#endif
-#endif
 
    video_context_driver_set((const gfx_ctx_driver_t*)ctx_driver);
 
@@ -1233,12 +1234,10 @@ static void d3d_free(void *data)
    d3d->overlays_size = 0;
 #endif
 
-#ifdef HAVE_MENU
    d3d_free_overlay(d3d, d3d->menu);
    if (d3d->menu)
       free(d3d->menu);
    d3d->menu          = NULL;
-#endif
 
    d3d_deinitialize(d3d);
 
@@ -1258,6 +1257,8 @@ static void d3d_free(void *data)
 
    if (d3d)
       free(d3d);
+
+   d3d_deinitialize_symbols();
 
 #ifndef _XBOX
    win32_destroy_window();
@@ -1513,8 +1514,8 @@ static bool d3d_read_viewport(void *data, uint8_t *buffer, bool is_idle)
 {
    d3d_video_t *d3d   = (d3d_video_t*)data;
 
-   if (  !d3d || 
-         !d3d->renderchain_driver || 
+   if (  !d3d ||
+         !d3d->renderchain_driver ||
          !d3d->renderchain_driver->read_viewport)
       return false;
 
@@ -1558,7 +1559,6 @@ static bool d3d_set_shader(void *data,
    return true;
 }
 
-#ifdef HAVE_MENU
 static void d3d_set_menu_texture_frame(void *data,
       const void *frame, bool rgb32, unsigned width, unsigned height,
       float alpha)
@@ -1573,8 +1573,9 @@ static void d3d_set_menu_texture_frame(void *data,
    (void)height;
    (void)alpha;
 
-   if (!d3d->menu->tex || d3d->menu->tex_w != width
-         || d3d->menu->tex_h != height)
+   if (    !d3d->menu->tex            || 
+            d3d->menu->tex_w != width ||
+            d3d->menu->tex_h != height)
    {
       if (d3d->menu)
 	     d3d_texture_free(d3d->menu->tex);
@@ -1652,7 +1653,6 @@ static void d3d_set_menu_texture_enable(void *data,
    d3d->menu->enabled            = state;
    d3d->menu->fullscreen         = full_screen;
 }
-#endif
 
 static void video_texture_load_d3d(d3d_video_t *d3d,
       struct texture_image *ti,
@@ -1660,7 +1660,7 @@ static void video_texture_load_d3d(d3d_video_t *d3d,
       uintptr_t *id)
 {
    *id = (uintptr_t)d3d_texture_new(d3d->dev, NULL,
-         ti->width, ti->height, 1, 
+         ti->width, ti->height, 1,
          0, D3DFMT_A8R8G8B8, D3DPOOL_MANAGED, 0, 0, 0,
          NULL, NULL);
 }
@@ -1745,13 +1745,8 @@ static const video_poke_interface_t d3d_poke_interface = {
    NULL, /* get_proc_address */
    d3d_set_aspect_ratio,
    d3d_apply_state_changes,
-#ifdef HAVE_MENU
    d3d_set_menu_texture_frame,
    d3d_set_menu_texture_enable,
-#else
-   NULL,
-   NULL,
-#endif
    d3d_set_osd_msg,
 
    d3d_show_mouse,
